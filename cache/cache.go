@@ -50,6 +50,7 @@ type Cache struct {
 	meta        *metaList
 	lru         *lruHeap
 	lock        sync.Mutex
+	sourceMap   map[string]*metaList
 }
 
 type metaObject struct {
@@ -93,7 +94,7 @@ func (c *Cache) evict(toFree int) {
 }
 
 // Put put
-func (c *Cache) Put(start, end int, buffer []byte) error {
+func (c *Cache) Put(start, end int, buffer []byte, sourceURL string) error {
 	// Locks cache
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -124,17 +125,25 @@ func (c *Cache) Put(start, end int, buffer []byte) error {
 	}
 	newMeta.lru = newLru
 
+	if metaListObj, ok := c.sourceMap[sourceURL]; ok {
+		metaListObj.append(newMeta)
+	} else {
+		newMetaList := &metaList{}
+		c.sourceMap[sourceURL] = newMetaList
+		c.sourceMap[sourceURL].append(newMeta)
+	}
+
 	c.lru.Push(newLru)
 	fmt.Println("Placed something in cache: ")
 	fmt.Println(newLru)
-	c.meta.append(newMeta)
+	// c.meta.append(newMeta)
 	c.currentSize = c.currentSize + newMeta.size
 
 	return nil
 }
 
 // Get gets
-func (c *Cache) Get(start, end int) ([]byte, error) {
+func (c *Cache) Get(start, end int, sourceURL string) ([]byte, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -164,32 +173,38 @@ func (c *Cache) Get(start, end int) ([]byte, error) {
 }
 
 // Implementation of binary search, returns index of metaObj matching range provided
-func (c *Cache) search(start, end int) (int, bool) {
-	fmt.Println(len(c.meta.list))
+func (c *Cache) search(start, end int, sourceURL string) (int, bool) {
 	var mid int
 	var found bool
-	lower, upper := 0, len(c.meta.list)-1
 
-	for lower <= upper {
-		mid = (lower + upper)
+	if targetMetaList, ok := c.sourceMap[sourceURL]; !ok {
+		found = false
+		break
+	} else {
 
-		if c.meta.list[mid].start <= start && start < c.meta.list[mid].end {
+		lower, upper := 0, len(targetMetaList.list)-1
+
+		for lower <= upper {
+			mid = (lower + upper)
+
+			if targetMetaList.list[mid].start <= start && start < targetMetaList.list[mid].end {
+				found = true
+				break
+			}
+
+			if targetMetaList.list[mid].start < start {
+				lower = mid + 1
+			} else {
+				upper = mid
+			}
+		}
+
+		if found && end <= targetMetaList.list[mid].end {
 			found = true
-			break
 		}
-
-		if c.meta.list[mid].start < start {
-			lower = mid + 1
-		} else {
-			upper = mid
-		}
+		fmt.Println("Search:")
+		fmt.Println(mid)
+		fmt.Println(found)
+		return mid, found
 	}
-
-	if found && end <= c.meta.list[mid].end {
-		found = true
-	}
-	fmt.Println("Search:")
-	fmt.Println(mid)
-	fmt.Println(found)
-	return mid, found
 }
