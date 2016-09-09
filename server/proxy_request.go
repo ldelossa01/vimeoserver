@@ -18,8 +18,7 @@ var (
 )
 
 func (s *VimeoService) proxyRequest(w http.ResponseWriter, r *http.Request) {
-	var ranges []int    // Holds by ranges if provided
-	var cacheServe bool // Should response be served from cache
+	var ranges []int // Holds by ranges if provided
 	var err error
 	var respBytes []byte   // Byte array holding response from origin
 	var rangeProvided bool // determines if range is provided
@@ -54,25 +53,43 @@ func (s *VimeoService) proxyRequest(w http.ResponseWriter, r *http.Request) {
 	if rangeProvided {
 		respBytes, err = s.cache.Get(ranges[0], ranges[1], sourceURL) // attempt cache lookup for byte range
 		if err == cache.ErrCacheMiss {
-			cacheServe = false
 			fmt.Println("Cache miss!")
+
+			req, err := http.NewRequest("GET", sourceURL, nil)
+			if err != nil {
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				return
+			}
+			req.Header.Add("Range", "bytes="+strings.Trim(byteRangeString, "\""))
+
+			// Perform request, close body on function close, handle errors
+			resp, err := s.httpClient.Do(req)
+			defer resp.Body.Close()
+			if err != nil {
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			}
+
+			// do not cache non 206 codes
+			if resp.StatusCode == 206 {
+				// Copy bytes from resp.Body to respBytes buffer to place in cache
+				respBytes, err = ioutil.ReadAll(resp.Body)
+				if err != nil {
+					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				}
+
+				// Asyc place bytes into cache
+				go s.cache.Put(ranges[0], ranges[1], respBytes, sourceURL)
+			}
 		} else {
-			cacheServe = true
-			fmt.Println("Served from cache")
+			w.Write(respBytes)
+			return
 		}
-	}
+	} else {
 
-	// If cache did not serve,
-	if !cacheServe {
-
-		// Create new request to source address, add necessary range header
 		req, err := http.NewRequest("GET", sourceURL, nil)
 		if err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
-		}
-		if rangeProvided {
-			req.Header.Add("Range", "bytes="+strings.Trim(byteRangeString, "\""))
 		}
 
 		// Perform request, close body on function close, handle errors
@@ -81,19 +98,12 @@ func (s *VimeoService) proxyRequest(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
-
-		// Copy bytes from resp.Body to respBytes buffer to place in cache
 		respBytes, err = ioutil.ReadAll(resp.Body)
 		if err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		}
-
-		// Asyc place bytes into cache
-		go s.cache.Put(ranges[0], ranges[1], respBytes, sourceURL)
+		w.Write(respBytes)
 	}
-
-	w.Write(respBytes)
-	return
 }
 
 // confirm that the source is valid
