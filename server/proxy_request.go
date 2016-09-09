@@ -31,10 +31,11 @@ func (s *VimeoService) proxyRequest(w http.ResponseWriter, r *http.Request) {
 	if s, ok := params["range"]; ok {
 		if ranges, err = rangeValidation(s[0], w); err != nil {
 			rangeProvided = false
-		} else {
-			rangeProvided = true
-			byteRangeString = s[0]
+			return
 		}
+		rangeProvided = true
+		byteRangeString = s[0]
+
 	}
 
 	// we need a source address in our request parameters
