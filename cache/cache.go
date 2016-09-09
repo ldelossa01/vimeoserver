@@ -47,18 +47,18 @@ func (lh *lruHeap) Pop() interface{} {
 type Cache struct {
 	maxSize     int
 	currentSize int
-	meta        *metaList
 	lru         *lruHeap
 	lock        sync.Mutex
 	sourceMap   map[string]*metaList
 }
 
 type metaObject struct {
-	start  int
-	end    int
-	lru    *lruObject
-	size   int
-	buffer []byte
+	start     int
+	end       int
+	lru       *lruObject
+	size      int
+	buffer    []byte
+	sourceURL string
 }
 
 type lruObject struct {
@@ -73,23 +73,25 @@ func NewCache(sizeMb int) *Cache {
 	heap.Init(lh)
 
 	return &Cache{
-		maxSize: size,
-		meta:    &metaList{},
-		lru:     lh,
+		maxSize:   size,
+		lru:       lh,
+		sourceMap: make(map[string]*metaList),
 	}
 }
 
 func (c *Cache) evict(toFree int) {
+	fmt.Println("running evict")
 	freeSpace := c.maxSize - c.currentSize
 
 	for freeSpace < toFree {
 		var lru *lruObject
 		lru = c.lru.Pop().(*lruObject)
+		targetMetaList := c.sourceMap[lru.ptr.sourceURL]
 
-		metaIndex, _ := c.search(lru.ptr.start, lru.ptr.end)
-		freeSpace = freeSpace + c.meta.list[metaIndex].size
+		metaIndex, _ := c.search(lru.ptr.start, lru.ptr.end, lru.ptr.sourceURL)
+		freeSpace = freeSpace + targetMetaList.list[metaIndex].size
 		// very fancy delete
-		c.meta.list = append(c.meta.list[:metaIndex], c.meta.list[metaIndex+1:]...)
+		targetMetaList.list = append(targetMetaList.list[:metaIndex], targetMetaList.list[metaIndex+1:]...)
 	}
 }
 
@@ -113,10 +115,11 @@ func (c *Cache) Put(start, end int, buffer []byte, sourceURL string) error {
 	copy(newBuffer, buffer)
 
 	newMeta := &metaObject{
-		start:  start,
-		end:    end,
-		buffer: newBuffer,
-		size:   len(buffer),
+		start:     start,
+		end:       end,
+		buffer:    newBuffer,
+		size:      len(buffer),
+		sourceURL: sourceURL,
 	}
 
 	newLru := &lruObject{
@@ -144,11 +147,20 @@ func (c *Cache) Put(start, end int, buffer []byte, sourceURL string) error {
 
 // Get gets
 func (c *Cache) Get(start, end int, sourceURL string) ([]byte, error) {
+	var targetMetaList *metaList
+
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
+	// Test to see if sourceURL is in sourceMap
+	if t, ok := c.sourceMap[sourceURL]; ok {
+		targetMetaList = t
+	} else {
+		return nil, ErrCacheMiss
+	}
+
 	// Attempt to retrieve index of meta index if found in metaList
-	metaIndex, found := c.search(start, end)
+	metaIndex, found := c.search(start, end, sourceURL)
 	if !found {
 		return nil, ErrCacheMiss
 	}
@@ -157,7 +169,7 @@ func (c *Cache) Get(start, end int, sourceURL string) ([]byte, error) {
 	returnBuffer := make([]byte, end-start)
 
 	// Obtain target metaObject, byte range index conversion from metaObj index to provided byte range
-	targetMeta := c.meta.list[metaIndex]
+	targetMeta := targetMetaList.list[metaIndex]
 	targetStartIndex := start - targetMeta.start
 	targetEndIndex := targetStartIndex + (end - start)
 
@@ -176,35 +188,36 @@ func (c *Cache) Get(start, end int, sourceURL string) ([]byte, error) {
 func (c *Cache) search(start, end int, sourceURL string) (int, bool) {
 	var mid int
 	var found bool
+	var targetMetaList *metaList
 
-	if targetMetaList, ok := c.sourceMap[sourceURL]; !ok {
+	if _, ok := c.sourceMap[sourceURL]; !ok {
 		found = false
-		break
-	} else {
-
-		lower, upper := 0, len(targetMetaList.list)-1
-
-		for lower <= upper {
-			mid = (lower + upper)
-
-			if targetMetaList.list[mid].start <= start && start < targetMetaList.list[mid].end {
-				found = true
-				break
-			}
-
-			if targetMetaList.list[mid].start < start {
-				lower = mid + 1
-			} else {
-				upper = mid
-			}
-		}
-
-		if found && end <= targetMetaList.list[mid].end {
-			found = true
-		}
-		fmt.Println("Search:")
-		fmt.Println(mid)
-		fmt.Println(found)
-		return mid, found
+		return 0, found
 	}
+	targetMetaList = c.sourceMap[sourceURL]
+
+	lower, upper := 0, len(targetMetaList.list)-1
+
+	for lower <= upper {
+		mid = (lower + upper)
+
+		if targetMetaList.list[mid].start <= start && start < targetMetaList.list[mid].end {
+			found = true
+			break
+		}
+
+		if targetMetaList.list[mid].start < start {
+			lower = mid + 1
+		} else {
+			upper = mid
+		}
+	}
+
+	if found && end <= targetMetaList.list[mid].end {
+		found = true
+	}
+	fmt.Println("Search:")
+	fmt.Println(mid)
+	fmt.Println(found)
+	return mid, found
 }

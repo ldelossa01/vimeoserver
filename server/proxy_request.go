@@ -52,7 +52,7 @@ func (s *VimeoService) proxyRequest(w http.ResponseWriter, r *http.Request) {
 
 	// If range provided, attempt cache serve, store array response in respBytes
 	if rangeProvided {
-		respBytes, err = s.cache.Get(ranges[0], ranges[1]) // attempt cache lookup for byte range
+		respBytes, err = s.cache.Get(ranges[0], ranges[1], sourceURL) // attempt cache lookup for byte range
 		if err == cache.ErrCacheMiss {
 			cacheServe = false
 			fmt.Println("Cache miss!")
@@ -89,7 +89,7 @@ func (s *VimeoService) proxyRequest(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Asyc place bytes into cache
-		go s.cache.Put(ranges[0], ranges[1], respBytes)
+		go s.cache.Put(ranges[0], ranges[1], respBytes, sourceURL)
 	}
 
 	w.Write(respBytes)
