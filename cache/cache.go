@@ -3,7 +3,6 @@ package cache
 import (
 	"container/heap"
 	"errors"
-	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -80,7 +79,6 @@ func NewCache(sizeMb int) *Cache {
 }
 
 func (c *Cache) evict(toFree int) {
-	fmt.Println("running evict")
 	freeSpace := c.maxSize - c.currentSize
 
 	for freeSpace < toFree {
@@ -137,9 +135,6 @@ func (c *Cache) Put(start, end int, buffer []byte, sourceURL string) error {
 	}
 
 	c.lru.Push(newLru)
-	fmt.Println("Placed something in cache: ")
-	fmt.Println(newLru)
-	// c.meta.append(newMeta)
 	c.currentSize = c.currentSize + newMeta.size
 
 	return nil
@@ -178,9 +173,6 @@ func (c *Cache) Get(start, end int, sourceURL string) ([]byte, error) {
 	targetMeta.lru.epoch = time.Now().Unix()
 	// sort.Sort(c.lru)
 
-	fmt.Println("Got something from cache!")
-	fmt.Println(targetMeta)
-	fmt.Println(returnBuffer)
 	return returnBuffer, nil
 }
 
@@ -198,8 +190,8 @@ func (c *Cache) search(start, end int, sourceURL string) (int, bool) {
 
 	lower, upper := 0, len(targetMetaList.list)-1
 
-	for lower <= upper {
-		mid = (lower + upper)
+	for lower < upper {
+		mid = (lower + upper) / 2
 
 		if targetMetaList.list[mid].start <= start && start < targetMetaList.list[mid].end {
 			found = true
@@ -216,8 +208,6 @@ func (c *Cache) search(start, end int, sourceURL string) (int, bool) {
 	if found && end <= targetMetaList.list[mid].end {
 		found = true
 	}
-	fmt.Println("Search:")
-	fmt.Println(mid)
-	fmt.Println(found)
+
 	return mid, found
 }

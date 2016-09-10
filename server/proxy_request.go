@@ -2,7 +2,6 @@ package server
 
 import (
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -54,8 +53,6 @@ func (s *VimeoService) proxyRequest(w http.ResponseWriter, r *http.Request) {
 	if rangeProvided {
 		respBytes, err = s.cache.Get(ranges[0], ranges[1], sourceURL) // attempt cache lookup for byte range
 		if err == cache.ErrCacheMiss {
-			fmt.Println("Cache miss!")
-
 			req, err := http.NewRequest("GET", sourceURL, nil)
 			if err != nil {
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)

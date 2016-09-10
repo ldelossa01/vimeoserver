@@ -19,11 +19,6 @@ func NewVimeoService() *VimeoService {
 		cache:      cache.NewCache(64),
 	}
 
-	// HTTPServer := &http.Server{
-	// 	Addr:    "localhost:8000",
-	// 	Handler: createHandlers(service),
-	// }
-
 	service.HTTPServer = &http.Server{Addr: "localhost:8000", Handler: createHandlers(service)}
 	return service
 }
