@@ -171,7 +171,6 @@ func (c *Cache) Get(start, end int, sourceURL string) ([]byte, error) {
 	copy(returnBuffer, targetMeta.buffer[targetStartIndex:targetEndIndex])
 
 	targetMeta.lru.epoch = time.Now().Unix()
-	// sort.Sort(c.lru)
 
 	return returnBuffer, nil
 }
@@ -190,7 +189,7 @@ func (c *Cache) search(start, end int, sourceURL string) (int, bool) {
 
 	lower, upper := 0, len(targetMetaList.list)-1
 
-	for lower < upper {
+	for lower <= upper {
 		mid = (lower + upper) / 2
 
 		if targetMetaList.list[mid].start <= start && start < targetMetaList.list[mid].end {
@@ -201,7 +200,7 @@ func (c *Cache) search(start, end int, sourceURL string) (int, bool) {
 		if targetMetaList.list[mid].start < start {
 			lower = mid + 1
 		} else {
-			upper = mid
+			upper = mid - 1
 		}
 	}
 

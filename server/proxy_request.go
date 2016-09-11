@@ -34,7 +34,6 @@ func (s *VimeoService) proxyRequest(w http.ResponseWriter, r *http.Request) {
 		}
 		rangeProvided = true
 		byteRangeString = s[0]
-
 	}
 
 	// we need a source address in our request parameters
