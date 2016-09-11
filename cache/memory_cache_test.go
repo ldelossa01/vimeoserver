@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func complexCache(cache *Cache, max int) {
+func complexCache(cache *MemCache, max int) {
 	for i := 0; i < max; i = i + 100000 {
 		putBytes := make([]byte, 100000)
 		cache.Put(i, i+100000, putBytes, "source-hash")
@@ -15,7 +15,7 @@ func complexCache(cache *Cache, max int) {
 }
 
 func TestSearchExactMatch(t *testing.T) {
-	cache := NewCache(1)
+	cache := NewMemCache(1)
 
 	putBytes := make([]byte, 30)
 	cache.Put(50, 80, putBytes, "source-hash")
@@ -28,7 +28,7 @@ func TestSearchExactMatch(t *testing.T) {
 }
 
 func TestSearchNOMatch(t *testing.T) {
-	cache := NewCache(1)
+	cache := NewMemCache(1)
 
 	putBytes := make([]byte, 30)
 	cache.Put(50, 80, putBytes, "source-hash")
@@ -41,7 +41,7 @@ func TestSearchNOMatch(t *testing.T) {
 }
 
 func TestSearchSubMatch(t *testing.T) {
-	cache := NewCache(1)
+	cache := NewMemCache(1)
 
 	putBytes := make([]byte, 30)
 	cache.Put(50, 80, putBytes, "source-hash")
@@ -54,7 +54,7 @@ func TestSearchSubMatch(t *testing.T) {
 }
 
 func TestSearchExactMatchComplex(t *testing.T) {
-	cache := NewCache(1)
+	cache := NewMemCache(1)
 
 	complexCache(cache, 100)
 
@@ -66,7 +66,7 @@ func TestSearchExactMatchComplex(t *testing.T) {
 }
 
 func TestEvictComplex(t *testing.T) {
-	cache := NewCache(1)
+	cache := NewMemCache(1)
 
 	complexCache(cache, 1000000)
 

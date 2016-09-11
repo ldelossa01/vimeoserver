@@ -7,11 +7,10 @@ import (
 	"time"
 )
 
+// Implements list to hold meta objects, implements Sort interface
 type metaList struct {
 	list []*metaObject
 }
-
-type lruHeap []*lruObject
 
 func (m *metaList) Len() int           { return len(m.list) }
 func (m *metaList) Swap(i, j int)      { m.list[i], m.list[j] = m.list[j], m.list[i] }
@@ -20,6 +19,9 @@ func (m *metaList) append(newEle *metaObject) {
 	m.list = append(m.list, newEle)
 	sort.Sort(m)
 }
+
+// Implements min-heap for cache eviction, implements heap interface with type assertion in Push
+type lruHeap []*lruObject
 
 func (lh lruHeap) Len() int           { return len(lh) }
 func (lh lruHeap) Less(i, j int) bool { return lh[i].epoch < lh[j].epoch }
@@ -36,7 +38,7 @@ func (lh *lruHeap) Pop() interface{} {
 	return item
 }
 
-// MemCache is a cache
+// MemCache is an in memory LRU-Cache
 type MemCache struct {
 	maxSize     int
 	currentSize int
@@ -45,6 +47,7 @@ type MemCache struct {
 	sourceMap   map[string]*metaList
 }
 
+// Implements object for holding meta-data and byte array for cache entries
 type metaObject struct {
 	start     int
 	end       int
@@ -54,6 +57,7 @@ type metaObject struct {
 	sourceURL string
 }
 
+// Implements object for lruHeap, has pointer to metaObject, and lruHeap is sorted on key: epoch
 type lruObject struct {
 	epoch int64
 	ptr   *metaObject
@@ -72,6 +76,7 @@ func NewMemCache(sizeMb int) *MemCache {
 	}
 }
 
+// Private function for handling evictions of objects from cache
 func (c *MemCache) evict(toFree int) {
 	freeSpace := c.maxSize - c.currentSize
 
@@ -82,12 +87,13 @@ func (c *MemCache) evict(toFree int) {
 
 		metaIndex, _ := c.search(lru.ptr.start, lru.ptr.end, lru.ptr.sourceURL)
 		freeSpace = freeSpace + targetMetaList.list[metaIndex].size
-		// very fancy delete
+
+		// Delete item from list
 		targetMetaList.list = append(targetMetaList.list[:metaIndex], targetMetaList.list[metaIndex+1:]...)
 	}
 }
 
-// Put put
+// Put places item into cache
 func (c *MemCache) Put(start, end int, buffer []byte, sourceURL string) error {
 	// Locks cache
 	c.lock.Lock()
@@ -103,23 +109,31 @@ func (c *MemCache) Put(start, end int, buffer []byte, sourceURL string) error {
 		c.evict(len(buffer))
 	}
 
+	// Create new buffer for metaObj creation
 	newBuffer := make([]byte, len(buffer))
 	copy(newBuffer, buffer)
 
+	// Create metObj
 	newMeta := &metaObject{
 		start:     start,
 		end:       end,
-		buffer:    newBuffer,
+		buffer:    newBuffer, // Holds bytes within specified byte ranges
 		size:      len(buffer),
 		sourceURL: sourceURL,
 	}
 
+	// Creates new lruObj with timestamp
 	newLru := &lruObject{
 		epoch: time.Now().Unix(),
 		ptr:   newMeta,
 	}
+
+	// Bind newLru to newMeta
 	newMeta.lru = newLru
 
+	// Do we have a hash for the sourceURL? If yes, append to found metaList obj
+	// if not create new metaList and create hash key for new sourceURL.
+	// Append newMeta to new metaListObj
 	if metaListObj, ok := c.sourceMap[sourceURL]; ok {
 		metaListObj.append(newMeta)
 	} else {
@@ -128,14 +142,17 @@ func (c *MemCache) Put(start, end int, buffer []byte, sourceURL string) error {
 		c.sourceMap[sourceURL].append(newMeta)
 	}
 
+	// Push newLru onto heap
 	c.lru.Push(newLru)
+	// Update cache's current size
 	c.currentSize = c.currentSize + newMeta.size
 
 	return nil
 }
 
-// Get gets
+// Get retreives items from the cache
 func (c *MemCache) Get(start, end int, sourceURL string) ([]byte, error) {
+
 	var targetMetaList *metaList
 
 	c.lock.Lock()
@@ -162,9 +179,13 @@ func (c *MemCache) Get(start, end int, sourceURL string) ([]byte, error) {
 	targetStartIndex := start - targetMeta.start
 	targetEndIndex := targetStartIndex + (end - start)
 
+	// Copy buffer for return
 	copy(returnBuffer, targetMeta.buffer[targetStartIndex:targetEndIndex])
 
+	// Update metaObj's lru epoch timestamp
 	targetMeta.lru.epoch = time.Now().Unix()
+	// Fix heap ordering after inclusion
+	heap.Fix(c.lru, c.lru.Len()-1)
 
 	return returnBuffer, nil
 }

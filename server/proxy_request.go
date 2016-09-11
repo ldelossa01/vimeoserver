@@ -17,11 +17,11 @@ var (
 )
 
 func (s *VimeoService) proxyRequest(w http.ResponseWriter, r *http.Request) {
-	var ranges []int // Holds by ranges if provided
+	var ranges []int // Slice holding provided ranges if provided
 	var err error
-	var respBytes []byte   // Byte array holding response from origin
-	var rangeProvided bool // determines if range is provided
-	var byteRangeString string
+	var respBytes []byte       // Byte array holding response from origin
+	var rangeProvided bool     // Is range provided?
+	var byteRangeString string // String containing passed byte range URL param
 
 	// parse params out of url
 	params := r.URL.Query()
@@ -50,40 +50,48 @@ func (s *VimeoService) proxyRequest(w http.ResponseWriter, r *http.Request) {
 
 	// If range provided, attempt cache serve, store array response in respBytes
 	if rangeProvided {
-		respBytes, err = s.cache.Get(ranges[0], ranges[1], sourceURL) // attempt cache lookup for byte range
-		if err == cache.ErrCacheMiss {
-			req, err := http.NewRequest("GET", sourceURL, nil)
-			if err != nil {
-				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-				return
-			}
-			req.Header.Add("Range", "bytes="+strings.Trim(byteRangeString, "\""))
 
-			// Perform request, close body on function close, handle errors
-			resp, err := s.httpClient.Do(req)
-			defer resp.Body.Close()
-			if err != nil {
-				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			}
+		// Attempt cache lookup
+		respBytes, err = s.cache.Get(ranges[0], ranges[1], sourceURL)
 
-			// do not cache non 206 codes
-			if resp.StatusCode == 206 {
-				// Copy bytes from resp.Body to respBytes buffer to place in cache
-				respBytes, err = ioutil.ReadAll(resp.Body)
-				if err != nil {
-					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-				}
-
-				// Asyc place bytes into cache
-				go s.cache.Put(ranges[0], ranges[1], respBytes, sourceURL)
-
-				w.Write(respBytes)
-				return
-			}
-		} else {
+		// If found in cache, return respBytes to ResponseWriter and return
+		if err != cache.ErrCacheMiss {
 			w.Write(respBytes)
 			return
 		}
+
+		// If cache miss: create new request, add appropraite header, place into cache, and return respBytes
+		req, err := http.NewRequest("GET", sourceURL, nil)
+		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+		// Add Range header to new request
+		req.Header.Add("Range", "bytes="+strings.Trim(byteRangeString, "\""))
+
+		// Perform request, close body on function close, handle errors
+		resp, err := s.httpClient.Do(req)
+		defer resp.Body.Close()
+		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+
+		// do not cache non 206 codes
+		if resp.StatusCode == 206 {
+			// Copy bytes from resp.Body to respBytes buffer to place in cache
+			respBytes, err = ioutil.ReadAll(resp.Body)
+			if err != nil {
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			}
+
+			// Asyc place bytes into cache
+			go s.cache.Put(ranges[0], ranges[1], respBytes, sourceURL)
+
+			// Write respBytes to ResponseWriter and return
+			w.Write(respBytes)
+			return
+		}
+		// If no range provided, simpley proxy the response
 	} else {
 
 		req, err := http.NewRequest("GET", sourceURL, nil)
@@ -106,14 +114,14 @@ func (s *VimeoService) proxyRequest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// confirm that the source is valid
+// Confirm that the source is valid
 func (s *VimeoService) sourceValidation(sourceURL string, w http.ResponseWriter) error {
 	if _, err := url.ParseRequestURI(sourceURL); err != nil {
 		http.Error(w, "Bad source string", http.StatusBadRequest)
 		return ErrInvalidSource
 	}
 
-	// determine if source address supports range requests
+	// Determine if source address supports range requests
 	resp, err := s.httpClient.Head(sourceURL)
 	if err != nil {
 		http.Error(w, "Bad source string, does not support range requests", http.StatusBadRequest)
@@ -134,7 +142,7 @@ func (s *VimeoService) sourceValidation(sourceURL string, w http.ResponseWriter)
 		}
 	}
 
-	//Proxy source content type to caller
+	// Proxy source content type to caller
 	w.Header().Set("Content-Type", resp.Header["Content-Type"][0])
 	return nil
 }
@@ -143,11 +151,13 @@ func (s *VimeoService) sourceValidation(sourceURL string, w http.ResponseWriter)
 func rangeValidation(brange string, w http.ResponseWriter) ([]int, error) {
 	tokens := strings.Split(brange, "-")
 
+	// Range should always have two values
 	if len(tokens) != 2 {
 		http.Error(w, "Bad byte range", http.StatusBadRequest)
 		return nil, ErrInvalidRange
 	}
 
+	// Convert strings to ints
 	r1, err := strconv.Atoi(strings.Trim(tokens[0], "\""))
 	if err != nil {
 		http.Error(w, "Bad byte range", http.StatusBadRequest)
@@ -159,6 +169,7 @@ func rangeValidation(brange string, w http.ResponseWriter) ([]int, error) {
 		return nil, ErrInvalidRange
 	}
 
+	// Start range should always be less then end
 	if r1 > r2 {
 		http.Error(w, "Bad byte range", http.StatusBadRequest)
 		return nil, ErrInvalidRange

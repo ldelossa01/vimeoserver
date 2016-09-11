@@ -52,7 +52,6 @@ func TestSourceValidationUrl(t *testing.T) {
 			htmlDataString: htmlDataString,
 			responseCode:   rr.Code,
 			sourceURL:      s,
-			byteRange:      "",
 		}
 
 		fmt.Printf("Source URL: %v Response Code: %v Data: %v", vr.sourceURL, vr.responseCode, vr.htmlDataString)
