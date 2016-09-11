@@ -17,6 +17,8 @@ VimeoServer implements a LRU in-memory cache. The cache implements an interface 
 
 The cache itself uses a min-heap to track epoch time of byte entries. Each eviction cycle pop's the object with the lowest epoch timestamp and evicts this object from cache.
 
+The cache implements it's own form of binary search. This need arose as we are dealing with ranges. In order to determine if we search "left" or "right", we needed some further logic.
+
 VimeoServer will also act as a simple proxy, however the source URL will require the Accept-Ranges header and the bytes value for this header declared. If these requirements are met VimeoServer will proxy the request with no need for byte ranges or partial responses.
 
 Tests are provided which confirm the functionality of the server along with the cache. These can be ran by:
@@ -25,3 +27,7 @@ Tests are provided which confirm the functionality of the server along with the 
 cd ./vimeoserver/server
 go test
 ```
+
+## ToDo:
+* More tests for higher coverage
+* Implement security mechanisms

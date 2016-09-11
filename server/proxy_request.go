@@ -7,7 +7,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"vimeoserver/cache"
+
+	"github.com/ldelossa/vimeoserver/cache"
 )
 
 // Constant declaration

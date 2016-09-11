@@ -2,7 +2,8 @@ package server
 
 import (
 	"net/http"
-	"vimeoserver/cache"
+
+	"github.com/ldelossa/vimeoserver/cache"
 )
 
 // VimeoService struct
