@@ -76,6 +76,9 @@ func (s *VimeoService) proxyRequest(w http.ResponseWriter, r *http.Request) {
 
 				// Asyc place bytes into cache
 				go s.cache.Put(ranges[0], ranges[1], respBytes, sourceURL)
+
+				w.Write(respBytes)
+				return
 			}
 		} else {
 			w.Write(respBytes)
